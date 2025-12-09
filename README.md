@@ -91,7 +91,7 @@ Implemented in `src/verify.py`.
   - Partially verified
   - Not verified
 - In CLI mode, the user reviews these results before export.
-- In the UI, verification appears in the “Summary & Verification Results” table.
+- In the UI, the user cant review the results or edit them before export.
 
 ---
 
