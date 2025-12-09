@@ -1,322 +1,211 @@
 # Deep Search & Verification Agent – Project C Case Study
 
-This repository contains my implementation of the **Deep Search & Verification Agent** for Project C.
+This repository contains my implementation of the Deep Search & Verification Agent for Project C.
 
-The goal of this feature is to automate a consultant-style research workflow:
+The feature automates a consultant-style research workflow:
 
-1. Understand the user’s research request and confirm the **research focus**.
-2. Propose a list of **countries + strategy names** to investigate.
-3. Find **authoritative links** for each strategy.
-4. **Scrape** the visible content from those links.
-5. Generate **factual summaries** of each strategy.
-6. Perform **sentence-level verification** so every summary sentence is backed by evidence.
-7. Export the results into a clean **Excel file** that can be used for benchmarking.
+1. Understand the user’s research request and confirm the research focus.
+2. Propose a list of countries and strategy names to investigate.
+3. Identify authoritative links for each strategy.
+4. Scrape the visible content from those links.
+5. Generate factual summaries for each strategy.
+6. Perform sentence-level verification so every summary statement is backed by evidence.
+7. Export all results into a structured Excel file.
 
-The agent can be run either from the **command line** or via a simple **Streamlit web UI**.
+Both a command-line interface and a Streamlit UI version are provided.
 
 ---
 
-## 1. How the Workflow Maps to the Assignment
+## 1. Workflow Overview
 
-### 1. User Input & Scope Confirmation
+### 1. User Input and Scope Confirmation
 
-- The user starts by entering a free-form request, e.g.:
+- The user provides a free-form research request such as:
+  “Research national transportation strategies for the top 10 countries.”
+- In CLI mode (`python -m src.main`):
+  - The request is clarified with an LLM using `scope.clarify_research_focus()`.
+  - The rewritten scope is displayed and the user must approve it.
+  - If rejected, the user may revise the scope manually.
+- In the Streamlit UI, the clarified scope is displayed beneath the input box.
 
-  > “Research national transportation strategies for the top 10 countries”
+---
 
-- In **CLI mode** (`python -m src.main`), the agent:
-  - Calls `scope.clarify_research_focus()` (using OpenAI) to rewrite the request into a clear research focus.
-  - Shows the proposed focus and asks:  
-    `Do you approve this research focus? [y/n]`
-  - If the user answers `n`, they can type their own focus string.
+### 2. Strategy Identification (Country + Strategy Name)
 
-- In the **Streamlit UI** (`streamlit run ui_app.py`), the clarified research focus is displayed immediately below the input so the user can visually confirm the scope.
+- `selector.generate_strategies()` generates a list of suggested country–strategy pairs.
+- In CLI mode:
+  - A numbered list is shown for user review.
+  - The user may remove any entries before confirming the list.
+- In the UI version, the list is displayed in a table under “Generated Strategies.”
 
-### 2. Strategy Identification (Countries + Strategy Names)
+---
 
-- `selector.generate_strategies()` uses the research focus to propose a list of **countries** and **strategy names** (e.g., national transport or mobility strategies).
-- In **CLI mode**, the user sees a numbered list and can remove entries:
+### 3. Link Extraction
 
-  ```text
-  >>> Proposed country & strategy list:
-   1. United States – National Freight Strategic Plan
-   2. China – National Transport Development Strategy
-   ...
-  If you want to remove any entries, type their numbers separated by commas (or press Enter to keep all):
+Performed in `search_links.populate_links()`.
 
-After editing, the user must confirm:
+- Attempts to locate authoritative URLs for each strategy.
+- Search behavior is pluggable:
+  - Tavily search when available.
+  - Optional Firecrawl search.
+  - Deterministic placeholder URLs (`example.com/...`) when external APIs fail.
+- This ensures the workflow remains fully functional even under rate limits or API key restrictions.
+- In CLI mode, the user reviews and approves the link list.
+- In the UI, links are displayed under “Identified Links.”
 
-Do you approve this list and want to proceed? [y/n]
-
-In the UI, the same list is shown in a table under “Generated Strategies”.
-
-These records are represented by the StrategyRecord dataclass in src/models.py.
-
-### 3. Link Extraction (Search Stage)
-
-search_links.populate_links() is responsible for finding links for each (country, strategy).
-
-The search logic is designed to be pluggable:
-
-First attempts a web search using Tavily (if available).
-
-Optionally can use Firecrawl search as a fallback (for environments where that’s configured).
-
-If both fail (e.g., API key issues or rate limits), the code falls back to deterministic placeholder URLs on example.com.
-This allows the rest of the pipeline (scraping, summarization, verification, Excel export) to run consistently even when search APIs are restricted during the case study.
-
-In CLI mode, a summary of the primary link per country is shown and the user is asked:
-
-Do you approve these links and want to proceed to scraping and summarization? [y/n]
-
-In the UI, the “Identified Links” table shows the Country, Strategy, and Primary Link columns.
-
-Note: In a real production setting, the placeholder URLs would be replaced once a stable search provider (e.g., Tavily, SerpAPI, or Bing Web Search) is configured.
+---
 
 ### 4. Web Scraping
 
-Implemented in src/scrape.py via fetch_all(records).
+Implemented in `src/scrape.py`.
 
-Current version uses Firecrawl where possible:
+- Real URLs are scraped using Firecrawl (HTML → markdown).
+- Extracted text is truncated to maintain manageable size.
+- Placeholder URLs produce placeholder text so that downstream summarization and verification still run.
+- Scraping output becomes the source content used for summarization and verification.
 
-For non-placeholder URLs, FirecrawlApp.scrape_url() is called with onlyMainContent=True and markdown format.
-
-Extracted markdown is truncated to a safe length to avoid huge payloads.
-
-For placeholder URLs (example.com), the scraper injects a clear placeholder text explaining that this is synthetic content.
-This keeps the pipeline functional under limited API access while still demonstrating the scraping and verification logic.
+---
 
 ### 5. Summary Generation
 
-src/summarize.py runs the summarization step via summarize_all(records).
+Implemented in `src/summarize.py`.
 
-For each strategy:
+- Each strategy's scraped content is summarized into several factual sentences using OpenAI.
+- Each sentence is stored as a `SummarySentence` object.
+- Summaries are strictly descriptive and avoid subjective rating or interpretation.
+- A final descriptive paragraph is generated for Excel export.
 
-The scraped raw text is split and passed to an OpenAI call.
-
-The model returns a set of structured summary sentences, each with:
-
-country
-
-strategy_name
-
-sentence (the actual sentence text)
-
-Sentences are stored as SummarySentence objects on the corresponding StrategyRecord.
-
-The final summary for Excel is the concatenation of these sentences into one descriptive paragraph:
-
-Descriptive, not interpretive: Focus on objectives, pillars, timelines, and relevant scope.
-
-No ranking or subjective evaluation is added.
+---
 
 ### 6. Verification Pass (Sentence-Level)
 
-Implemented in src/verify.py via verify_all(records).
+Implemented in `src/verify.py`.
 
-For each SummarySentence:
+- Every summary sentence is checked against the scraped source text.
+- Required verification labels:
+  - Verified
+  - Partially verified
+  - Not verified
+- A strategy-level verification status is also computed:
+  - All verified
+  - Partially verified
+  - Not verified
+- In CLI mode, the user reviews these results before export.
+- In the UI, the user cant review the results or edit them before export.
 
-The agent checks whether the sentence (or its core facts) are supported by the scraped raw_text.
-
-Each sentence receives a verification_status label, one of:
-
-"Verified" – sentence is fully supported by the source.
-
-"Partially verified" – most of the sentence matches, but some elements are weak or only indirectly stated.
-
-"Not verified" – the claim does not appear or cannot be backed by the scraped content.
-
-For each strategy, the code also computes an overall verification_status:
-
-"All verified" – every sentence is verified.
-
-"Partially verified" – some sentences are partially or not verified.
-
-"Not verified" – none of the sentences could be verified.
-
-In CLI mode, a short verification overview is printed:
-
->>> Verification overview:
-- Germany: All verified
-- Japan: Partially verified
-...
-
-In the UI, the “Summary & Verification Results” table shows each row with:
-
-Country
-
-Strategy
-
-Link
-
-Full summary (joined sentences)
-
-Aggregated verification status
-
-The user is then asked in CLI mode:
-
-Do you approve these summaries and verification results to be exported to Excel? [y/n]
+---
 
 ### 7. Excel Assembly
 
-Implemented in src/export_excel.py.
+Implemented in `src/export_excel.py`.
 
-The final Excel file is named: deep_search_results.xlsx and is written to the project root.
+- Results are exported to `deep_search_results.xlsx`.
+- Required columns:
+  - Country
+  - Strategy name
+  - Description / summary
+  - Link
+- An additional “Verification status” column is included.
+- In the Streamlit UI, a download button is available.
 
-Required columns (per the assignment) are included:
-
-Country
-
-Strategy name
-
-Description / summary
-
-Link
-
-Additionally, an extra column is added:
-
-Verification status – the overall status per strategy (All verified, Partially verified, or Not verified).
-
-In the Streamlit UI, a Download button is provided to download the Excel file directly.
+---
 
 ## 2. Project Structure
+
+```
 project-c-agent/
 ├─ src/
-│  ├─ config.py         # Loads API keys from .env
-│  ├─ models.py         # Dataclasses: StrategyRecord, SummarySentence
-│  ├─ scope.py          # Clarifies research focus using LLM
-│  ├─ selector.py       # Generates (country, strategy) list
-│  ├─ search_links.py   # Web search & link selection (Tavily / Firecrawl / fallbacks)
-│  ├─ scrape.py         # Scrapes text content via Firecrawl (with placeholders)
-│  ├─ summarize.py      # Creates factual summaries and sentence objects
-│  ├─ verify.py         # Sentence-level verification & aggregate status
-│  ├─ export_excel.py   # Builds deep_search_results.xlsx
-│  └─ main.py           # CLI entrypoint and end-to-end pipeline orchestration
-├─ ui_app.py            # Streamlit UI wrapper
-├─ requirements.txt     # Python dependencies
-├─ .env                 # Environment variables (NOT checked into git)
+│  ├─ config.py         # Environment variable loading
+│  ├─ models.py         # Data models: StrategyRecord, SummarySentence
+│  ├─ scope.py          # LLM-based research focus clarification
+│  ├─ selector.py       # Strategy list generation
+│  ├─ search_links.py   # Web search and link identification
+│  ├─ scrape.py         # Content retrieval
+│  ├─ summarize.py      # Summary generation logic
+│  ├─ verify.py         # Sentence-level verification engine
+│  ├─ export_excel.py   # Excel assembly
+│  └─ main.py           # Full CLI workflow
+├─ ui_app.py            # Streamlit UI implementation
+├─ requirements.txt     # Dependencies
+├─ .env                 # API keys (ignored by git)
 └─ .gitignore
+```
 
-## 3. Setup & Installation
+---
+
+## 3. Setup and Installation
+
 ### 3.1. Python Environment
 
-Tested with Python 3.11.
-# Clone the repo
+This project was developed with Python 3.11.
+
+```
 git clone https://github.com/<your-username>/project-c-agent.git
 cd project-c-agent
 
-# Create and activate a virtual environment (optional but recommended)
 python -m venv project-c-env
-project-c-env\Scripts\activate       # Windows PowerShell
-# source project-c-env/bin/activate  # macOS / Linux
+project-c-env\Scripts\activate        # Windows PowerShell
+# source project-c-env/bin/activate   # macOS / Linux
 
-# Install dependencies
 pip install -r requirements.txt
+```
+
+---
 
 ### 3.2. Environment Variables
 
-Create a .env file in the project root:
-OPENAI_API_KEY=sk-...
-TAVILY_API_KEY=your_tavily_key_here          # optional / used when available
-FIRECRAWL_API_KEY=your_firecrawl_key_here    # used for scraping
-#SERPAPI_API_KEY=your_serpapi_key_here      # optional future extension
+Create a `.env` file:
 
-Keys are loaded in src/config.py via python-dotenv.
+```
+OPENAI_API_KEY=your_openai_key
+TAVILY_API_KEY=your_tavily_key
+FIRECRAWL_API_KEY=your_firecrawl_key
+# SERPAPI_API_KEY=your_serpapi_key   (optional)
+```
 
-.env is already ignored by .gitignore so that API keys are not exposed in the repository.
+---
 
 ## 4. Running the Agent
+
 ### 4.1. Command-Line Mode
 
-From the project root (with the virtualenv activated):
+```
 python -m src.main
+```
 
-You will be prompted for:
+---
 
-Research request
+### 4.2. Streamlit UI
 
-Confirmation of research focus
-
-Approval / editing of the country & strategy list
-
-Approval of identified links
-
-Approval of final summaries & verification before export
-
-The final Excel file deep_search_results.xlsx will be created in the project root.
-
-### 4.2. Streamlit Web UI
-
+```
 streamlit run ui_app.py
+```
 
-The UI provides:
+---
 
-A text area for the research request.
+## 5. Assumptions and Limitations
 
-A display of the Research Focus.
+- Search APIs may be restricted; fallback URLs maintain workflow functionality.
+- Scraping supports HTML; PDF parsing is not included.
+- Verification operates at sentence level.
+- Modular design allows replacing search/scraping components.
 
-Tables for:
-
-Generated Strategies
-
-Identified Links
-
-Summary & Verification Results
-
-A Download Excel button once the run is complete.
-
-This satisfies the bonus “simple UI” requirement in the case description.
-
-## 5. Assumptions & Limitations
-
-Search providers:
-During the case, external web search APIs may be rate-limited or blocked.
-To keep the workflow stable, search_links.py is written to:
-
-Try Tavily first (when authorized).
-
-Optionally use Firecrawl search.
-
-Fall back to deterministic example.com URLs if all web search options fail.
-
-This allows the rest of the pipeline (scraping, summarization, verification, Excel export) to be demonstrated consistently. With a working SerpAPI / Bing / Tavily key, these placeholders can be replaced by real government URLs without changing the overall logic.
-
-Scraping:
-Current scraping is optimized for HTML pages via Firecrawl and simple placeholder text. For real production use, PDF parsing and richer error handling would be added.
-
-Verification granularity:
-Verification happens at sentence level and returns one of Verified, Partially verified, Not verified.
-The Excel export aggregates these into a single Verification status per strategy.
-If a more detailed audit trail is required, an additional sheet with sentence-level breakdown could be added.
+---
 
 ## 6. Possible Extensions
 
-Some ideas for further improvements (beyond the case requirements):
+- Additional search providers (Bing, SerpAPI).
+- Project C homepage UI.
+- Sentence-level Excel sheet.
+- Caching for repeated queries.
 
-Pluggable search backends: clean interface to swap between Tavily, SerpAPI, Bing, etc.
+---
 
-Richer UI: a simple “Project C home page” listing multiple features and allowing navigation to this Deep Search agent (aligning with the bonus front-end idea).
+## 7. Evaluation Alignment
 
-Sentence-level Excel sheet: export a second tab with one row per summary sentence and its verification label and evidence span.
+- Workflow and logic follow assignment requirements.
+- Technically feasible under constrained API conditions.
+- Clear communication through CLI prompts, UI tables, and structured outputs.
+- Includes optional UI implementation and modular search architecture.
 
-Caching: cache search, scraping, and summarization results for repeated runs on the same strategies.
-
-## 7. How This Meets the Evaluation Criteria
-
-Workflow & Logic Clarity (30%)
-The pipeline is broken into clear stages with dedicated modules (scope, selector, search_links, scrape, summarize, verify, export_excel) and explicit user approvals in CLI mode.
-
-Technical Feasibility (30%)
-The agent runs end-to-end using standard Python tools (OpenAI, Tavily/Firecrawl, pandas, Excel). When external search APIs are limited, deterministic fallbacks keep the workflow functional.
-
-Communication & Structure (20%)
-Both CLI and UI flows make intermediate steps visible: research focus, strategy list, links, summaries, and verification overview.
-
-Creativity & Bonus Execution (20%)
-
-Implements a Streamlit UI for interactive usage and Excel download.
-
-Uses a modular design to allow future swapping of web search and scraping backends.
-
-Provides verification labels to reduce hallucination risk and support evidence-based analysis.
 
