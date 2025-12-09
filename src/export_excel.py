@@ -4,24 +4,24 @@ from .models import StrategyRecord
 
 def export_to_excel(records: List[StrategyRecord], path: str = "deep_search_results.xlsx"):
     rows = []
-    for rec in records:
-        # Sentences we keep in the description
-        verified_sentences = [
-            s.sentence for s in rec.summary_sentences
-            if s.status in (None, "Verified", "Partially verified")
-        ]
-        description = " ".join(verified_sentences)
 
-        # Overall verification status for this strategy
+    for rec in records:
+
+        # --- Build FULL summary (all sentences joined) ---
+        description = " ".join([s.sentence for s in rec.summary_sentences])
+
+        # --- Compute overall verification status ---
         if not rec.summary_sentences:
-            overall_status = "No summary"
+            overall_status = "Not verified"
         else:
-            statuses = {s.status for s in rec.summary_sentences}
+            statuses = {s.status for s in rec.summary_sentences if s.status}
+
             if statuses == {"Verified"}:
-                overall_status = "All verified"
-            elif "Not verified" in statuses:
-                overall_status = "Contains unverified sentences"
+                overall_status = "Verified"
+            elif statuses == {"Not verified"}:
+                overall_status = "Not verified"
             else:
+                # mixture: Verified + Partially verified or includes some Not verified
                 overall_status = "Partially verified"
 
         rows.append({
