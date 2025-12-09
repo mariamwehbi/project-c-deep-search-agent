@@ -1,5 +1,3 @@
-# src/scrape.py
-
 from typing import List
 
 from firecrawl import FirecrawlApp

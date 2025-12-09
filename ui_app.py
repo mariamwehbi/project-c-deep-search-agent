@@ -1,8 +1,15 @@
-# ui_app.py
 import streamlit as st
 import pandas as pd
 
-from src.main import run_pipeline
+from src import (
+    scope,
+    selector,
+    search_links,
+    scrape,
+    summarize,
+    verify,
+    export_excel
+)
 
 st.set_page_config(page_title="Deep Search & Verification Agent", layout="wide")
 

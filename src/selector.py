@@ -1,5 +1,3 @@
-# src/selector.py
-
 from typing import List
 from openai import OpenAI
 
@@ -33,12 +31,7 @@ Japan | Next-Generation Mobility Strategy
 
 
 def generate_strategies(research_focus: str) -> List[StrategyRecord]:
-    """
-    Use GPT-4.1-mini to propose a list of countries and strategy names
-    based on the clarified research focus.
-
-    Falls back to 2 hard-coded examples if anything goes wrong.
-    """
+    
     if not research_focus:
         research_focus = "National transport and mobility strategies of major economies."
 

@@ -1,5 +1,3 @@
-# src/search_links.py
-
 from typing import List, Optional
 
 from tavily import TavilyClient
@@ -14,10 +12,7 @@ firecrawl_app = FirecrawlApp(api_key=FIRECRAWL_API_KEY) if FIRECRAWL_API_KEY els
 
 
 def _choose_best_url(results: List[dict]) -> Optional[str]:
-    """
-    Given a list of search results (each having a 'url'), pick the most
-    official-looking one if possible (gov / ministry), otherwise the first.
-    """
+
     if not results:
         return None
 

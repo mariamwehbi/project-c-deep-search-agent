@@ -1,5 +1,3 @@
-# src/main.py
-
 from typing import List
 
 from . import (
