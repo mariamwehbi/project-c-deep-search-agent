@@ -140,7 +140,7 @@ project-c-agent/
 This project was developed with Python 3.11.
 
 ```
-git clone https://github.com/<your-username>/project-c-agent.git
+git clone https://github.com/mariamwehbi/project-c-deep-search-agent.git
 cd project-c-agent
 
 python -m venv project-c-env
