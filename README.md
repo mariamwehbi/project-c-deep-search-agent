@@ -194,18 +194,31 @@ streamlit run ui_app.py
 
 ## 6. Possible Extensions
 
-- Additional search providers (Bing, SerpAPI).
-- Project C homepage UI.
-- Sentence-level Excel sheet.
-- Caching for repeated queries.
+Some ideas for further improvements (beyond the case requirements):
 
----
+Pluggable search backends: clean interface to swap between Tavily, SerpAPI, Bing, etc.
 
-## 7. Evaluation Alignment
+Richer UI: a simple “Project C home page” listing multiple features and allowing navigation to this Deep Search agent (aligning with the bonus front-end idea).
 
-- Workflow and logic follow assignment requirements.
-- Technically feasible under constrained API conditions.
-- Clear communication through CLI prompts, UI tables, and structured outputs.
-- Includes optional UI implementation and modular search architecture.
+Sentence-level Excel sheet: export a second tab with one row per summary sentence and its verification label and evidence span.
 
+Caching: cache search, scraping, and summarization results for repeated runs on the same strategies.
 
+## 7. How This Meets the Evaluation Criteria
+
+Workflow & Logic Clarity (30%)
+The pipeline is broken into clear stages with dedicated modules (scope, selector, search_links, scrape, summarize, verify, export_excel) and explicit user approvals in CLI mode.
+
+Technical Feasibility (30%)
+The agent runs end-to-end using standard Python tools (OpenAI, Tavily/Firecrawl, pandas, Excel). When external search APIs are limited, deterministic fallbacks keep the workflow functional.
+
+Communication & Structure (20%)
+Both CLI and UI flows make intermediate steps visible: research focus, strategy list, links, summaries, and verification overview.
+
+Creativity & Bonus Execution (20%)
+
+Implements a Streamlit UI for interactive usage and Excel download.
+
+Uses a modular design to allow future swapping of web search and scraping backends.
+
+Provides verification labels to reduce hallucination risk and support evidence-based analysis.
