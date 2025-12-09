@@ -46,7 +46,7 @@ Performed in `search_links.populate_links()`.
 
 - Attempts to locate authoritative URLs for each strategy.
 - Search behavior is pluggable:
-  - Tavily search when available.
+  - Uses SerpAPI as the primary search provider to locate authoritative URLs for each strategy.
   - Optional Firecrawl search.
   - Deterministic placeholder URLs (`example.com/...`) when external APIs fail.
 - This ensures the workflow remains fully functional even under rate limits or API key restrictions.
@@ -160,8 +160,7 @@ Create a `.env` file:
 OPENAI_API_KEY=your_openai_key
 TAVILY_API_KEY=your_tavily_key
 FIRECRAWL_API_KEY=your_firecrawl_key
-# SERPAPI_API_KEY=your_serpapi_key   (optional)
-```
+ SERPAPI_API_KEY=your_serpapi_key   
 
 ---
 
@@ -186,7 +185,7 @@ streamlit run ui_app.py
 ## 5. Assumptions and Limitations
 
 - Search APIs may be restricted; fallback URLs maintain workflow functionality.
-- Scraping supports HTML; PDF parsing is not included.
+- Scraping supports HTML and PDF.
 - Verification operates at sentence level.
 - Modular design allows replacing search/scraping components.
 

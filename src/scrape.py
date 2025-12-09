@@ -1,48 +1,105 @@
 from typing import List
+from io import BytesIO
 
-from firecrawl import FirecrawlApp
+import requests
+import pdfplumber
+from bs4 import BeautifulSoup
 
-from .config import FIRECRAWL_API_KEY
 from .models import StrategyRecord
 
-# Only create the client if we actually have a key
-firecrawl_app = FirecrawlApp(api_key=FIRECRAWL_API_KEY) if FIRECRAWL_API_KEY else None
+
+def _extract_pdf_text(content: bytes, max_pages: int = 5) -> str:
+    """
+    Extract text from a PDF byte stream.
+    To keep things fast, only the first `max_pages` pages are processed.
+    """
+    text_chunks = []
+    with pdfplumber.open(BytesIO(content)) as pdf:
+        for i, page in enumerate(pdf.pages):
+            if i >= max_pages:
+                break
+            page_text = page.extract_text() or ""
+            text_chunks.append(page_text)
+    return "\n".join(text_chunks)
+
+
+def _extract_html_text(html: str) -> str:
+    """Extract visible text from an HTML page."""
+    soup = BeautifulSoup(html, "html.parser")
+
+    # Remove common noise
+    for tag in soup(["script", "style", "noscript"]):
+        tag.decompose()
+
+    body = soup.body or soup
+    text = body.get_text(separator="\n", strip=True)
+    return text
+
+
+def _fetch_url_text(url: str) -> str:
+    """
+    Fetch and extract text from a URL.
+    - If PDF: use pdfplumber
+    - Else: treat as HTML
+    On any error (403, timeout, etc.), return a clear placeholder string.
+    """
+    try:
+        resp = requests.get(url, timeout=25)
+
+        # If server returns an error code, don't crash – just log & fallback
+        if resp.status_code >= 400:
+            print(f"[fetch_all] HTTP {resp.status_code} for {url}")
+            return (
+                "No readable content could be extracted from this URL due to "
+                f"an HTTP error ({resp.status_code}). This is a placeholder description."
+            )
+
+        content_type = resp.headers.get("Content-Type", "").lower()
+
+        # PDF by extension or content-type
+        if url.lower().endswith(".pdf") or "application/pdf" in content_type:
+            return _extract_pdf_text(resp.content)
+
+        # Otherwise, assume HTML
+        return _extract_html_text(resp.text)
+
+    except Exception as e:
+        print(f"[fetch_all] Error scraping {url}: {repr(e)}")
+        return (
+            "No readable content could be extracted from this URL. "
+            "This is a placeholder description based on the link only."
+        )
 
 
 def fetch_all(records: List[StrategyRecord]) -> List[StrategyRecord]:
     """
-    Step 4 in the spec: fetch raw text for each strategy link.
-
-    - For real URLs, we call Firecrawl's scrape_url and keep the main content.
-    - For placeholder/example URLs, we store a clear placeholder message.
+    For each StrategyRecord:
+      - If the link is a fake example.com placeholder, explain that.
+      - Otherwise, fetch the URL and extract readable text.
     """
     for rec in records:
         url = rec.primary_link or ""
 
-        # If this is obviously a placeholder link, don't pretend it's real
-        if "example.com" in url or not firecrawl_app:
+        if not url:
             rec.raw_text = (
-                f"This is placeholder content for {rec.strategy_name} in {rec.country}. "
-                f"In the real implementation, this will contain the scraped content "
-                f"from the strategy document at {url or 'a missing URL'}."
+                f"No link is available for {rec.strategy_name} in {rec.country}."
             )
             continue
 
-        try:
-            result = firecrawl_app.scrape_url(
-                url,
-                params={"formats": ["markdown"], "onlyMainContent": True},
-            )
-            markdown = result.get("markdown", "")
-            # Avoid huge strings
-            rec.raw_text = markdown[:10000] if markdown else (
-                f"No main content was extracted from {url}."
-            )
-        except Exception as e:
-            print(f"[fetch_all] Error scraping {url}: {repr(e)}")
+        # If it's one of our deterministic placeholders, be explicit
+        if "example.com" in url:
             rec.raw_text = (
-                f"Could not scrape content for {rec.strategy_name} in {rec.country}. "
-                f"Error: {repr(e)}"
+                f"This is a placeholder link (example.com) for "
+                f"{rec.strategy_name} in {rec.country}. "
+                "No official document could be reliably located by the search step."
             )
+            continue
+
+        # Real URL → try to scrape
+        rec.raw_text = _fetch_url_text(url)
+
+        # Trim to avoid enormous strings
+        if len(rec.raw_text) > 15000:
+            rec.raw_text = rec.raw_text[:15000]
 
     return records

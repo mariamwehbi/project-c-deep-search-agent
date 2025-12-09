@@ -6,3 +6,5 @@ streamlit
 firecrawl-py
 tavily-python
 openpyxl
+beautifulsoup4
+pdfplumber
