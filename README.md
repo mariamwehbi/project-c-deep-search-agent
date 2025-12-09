@@ -161,7 +161,7 @@ OPENAI_API_KEY=your_openai_key
 TAVILY_API_KEY=your_tavily_key
 FIRECRAWL_API_KEY=your_firecrawl_key
  SERPAPI_API_KEY=your_serpapi_key   
-
+```
 ---
 
 ## 4. Running the Agent
